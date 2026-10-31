@@ -1,0 +1,6 @@
+[project]
+name = "zburn-hub"
+version = "1.0.0"
+description = "着色器工单独立派发服务（_sup 文件协议）"
+requires-python = ">=3.10"
+license = {text = "MIT"}

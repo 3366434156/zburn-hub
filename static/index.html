@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>zburn-hub · 着色器工单</title>
+<style>
+:root{--bg:#0d1017;--card:#151923;--line:rgba(255,255,255,.08);--fg:#e6e9f2;--muted:#8b93a7;--ac:#4f8cff;--ok:#3cb478;--warn:#ffb43c;--bad:#e65050}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.6 "Segoe UI","Microsoft YaHei",sans-serif}
+.wrap{max-width:1080px;margin:0 auto;padding:20px 16px 60px}
+h1{font-size:18px;margin:8px 0 2px} h1 small{color:var(--muted);font-weight:400;font-size:12px;margin-left:8px}
+.hint{color:var(--muted);font-size:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px}
+.btn{background:#232a38;color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:13px}
+.btn:hover{border-color:var(--ac)} .btn.primary{background:var(--ac);border-color:var(--ac);color:#fff}
+input,textarea{width:100%;background:#0b0e14;border:1px solid var(--line);border-radius:8px;color:var(--fg);padding:7px 10px;font:inherit}
+.row2{display:flex;gap:8px}.row2>*{flex:1;margin-bottom:8px}
+input,textarea{margin-bottom:8px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);white-space:nowrap}
+.note{max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
+.st{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:600}
+.st-queued{background:rgba(120,140,255,.15);color:#8ea2ff}
+.st-dispatched{background:rgba(255,180,60,.15);color:var(--warn)}
+.st-done{background:rgba(60,180,120,.15);color:var(--ok)}
+.st-failed{background:rgba(230,80,80,.15);color:var(--bad)}
+.st-cancelled{background:rgba(150,150,150,.15);color:#999}
+#toast{position:fixed;top:14px;right:14px;background:#232a38;border:1px solid var(--line);border-radius:8px;padding:8px 14px;display:none;z-index:9}
+code{background:#0b0e14;border-radius:5px;padding:1px 6px;font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>zburn-hub · 着色器工单 <small id="meta"></small></h1>
+  <div class="hint" style="margin-bottom:12px">派单通道：<code>_sup\next-prompt.txt</code>（Stop 钩子一次性消费）· 验收：watch 文件变化 + verify 命令 · 总闸与 zcode-hub 设置页共用同一文件</div>
+
+  <div class="card" id="sup-line">续派总闸加载中…</div>
+
+  <div class="card">
+    <b>入队新工单</b>
+    <div style="margin-top:8px">
+      <input id="wo-title" placeholder="工单标题，例：铁道后十景全链">
+      <textarea id="wo-prompt" rows="4" placeholder="工单指令（写清「完成后停下」）"></textarea>
+      <div class="row2">
+        <input id="wo-watch" placeholder="watch 文件（逗号分隔，可选）">
+        <input id="wo-verify" placeholder="verify 命令（可选，exit 0 = 通过）">
+      </div>
+      <div class="row2">
+        <input id="wo-cwd" placeholder="verify 工作目录（可选）">
+        <input id="wo-retries" type="number" min="0" value="1">
+      </div>
+      <button class="btn primary" onclick="enqueue()">入队</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <b>工单队列</b> <button class="btn" onclick="dispatchNow()">立即派单</button> <button class="btn" onclick="clearDone()">清已完成</button>
+    <div id="queue" style="margin-top:8px">加载中…</div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+const SUP=localStorage.getItem('burner-sup')||'';
+const KEY=()=>localStorage.getItem('burner-key')||'';
+function saveKey(){const k=prompt('输入后台密钥（首次启动看启动输出，或 data/admin-key.txt）');if(k)localStorage.setItem('burner-key',k.trim());}
+async function api(m,p,b){
+  const r=await fetch('/admin/api'+p,{method:m,headers:{...(b!=null&&{'Content-Type':'application/json'}),Authorization:'Bearer '+KEY()},...(b!=null&&{body:JSON.stringify(b)})});
+  if(r.status===401){saveKey();throw new Error('密钥不对，已重新输入，再试一次');}
+  if(!r.ok)throw new Error((await r.json().catch(()=>({}))).detail||r.status);
+  return r.json();
+}
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',2600);}
+function esc(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+const ST={queued:'排队',dispatched:'执行中',done:'完成',failed:'失败',cancelled:'已取消'};
+
+async function load(){
+  try{
+    const s=await api('GET','/state');
+    const meta=await fetch('/meta').then(r=>r.json()).catch(()=>({}));
+    document.getElementById('meta').textContent='v'+(meta.version||'');
+    document.getElementById('sup-line').innerHTML=`续派总闸：
+      <b style="color:${s.enabled?'var(--ok)':'var(--bad)'}">${s.enabled?'开启':'关闭'}</b>
+      ｜循环模式：<b>${s.loop?'开（烧额度）':'关'}</b>
+      ｜待发指令：${s.promptPending?'<b>在途</b>':'无'}
+      ｜历史续派：${s.count}
+      <button class="btn" onclick="supToggle('enabled',${!s.enabled})">${s.enabled?'关闭总闸':'打开总闸'}</button>
+      <button class="btn" onclick="supToggle('loop',${!s.loop})">${s.loop?'关循环':'开循环(慎用)'}</button>`;
+    const q=s.queue||[],st=s.stats||{};
+    document.getElementById('queue').innerHTML=!q.length?'<div class="hint">队列空。</div>':
+      `<div class="hint" style="margin-bottom:8px">排队 ${st.queued} · 执行中 ${st.dispatched} · 完成 ${st.done} · 失败 ${st.failed} · 取消 ${st.cancelled}</div>
+      <table><thead><tr><th>工单</th><th>状态</th><th>备注</th><th>时间</th><th></th></tr></thead><tbody>
+      ${q.map(o=>{const t=(o.dispatchedAt||o.at)*1000;return `<tr>
+        <td><code>${esc(o.id)}</code><br><span class="hint">${esc(o.title)}</span></td>
+        <td><span class="st st-${esc(o.status)}">${ST[o.status]||esc(o.status)}</span><br><span class="hint">${o.tries}/${o.retries}</span></td>
+        <td class="note" title="${esc(o.note)}">${esc(o.note)||'—'}</td>
+        <td class="hint">${t?new Date(t).toLocaleString():''}</td>
+        <td>${(o.status==='done'||o.status==='failed'||o.status==='cancelled')
+          ?`<button class="btn" onclick="retry('${o.id}')">重试</button>`
+          :`<button class="btn" onclick="cancel('${o.id}')">取消</button>`}</td>
+      </tr>`}).join('')}</tbody></table>`;
+  }catch(e){document.getElementById('sup-line').textContent='加载失败：'+e.message;}
+}
+async function supToggle(kind,want){
+  try{await api('POST','/supervisor/'+kind,kind==='enabled'?{enabled:want}:{loop:want});toast('已切换');load();}
+  catch(e){toast('失败: '+e.message);}
+}
+async function enqueue(){
+  const title=(document.getElementById('wo-title').value||'').trim();
+  const prompt=(document.getElementById('wo-prompt').value||'').trim();
+  if(!title||!prompt){toast('标题和指令都要填');return;}
+  try{
+    await api('POST','/enqueue',{title,prompt,
+      watch:(document.getElementById('wo-watch').value||'').split(',').map(s=>s.trim()).filter(Boolean),
+      verify_cmd:(document.getElementById('wo-verify').value||'').trim(),
+      cwd:(document.getElementById('wo-cwd').value||'').trim(),
+      retries:parseInt(document.getElementById('wo-retries').value||'0',10)||0});
+    toast('已入队');document.getElementById('wo-title').value='';document.getElementById('wo-prompt').value='';load();
+  }catch(e){toast('入队失败: '+e.message);}
+}
+async function cancel(id){if(!confirm('取消 '+id+'？'))return;try{await api('POST','/order/'+id+'/cancel',{});toast('已取消');load();}catch(e){toast('失败: '+e.message);}}
+async function retry(id){try{await api('POST','/order/'+id+'/retry',{});toast('已重置排队');load();}catch(e){toast('失败: '+e.message);}}
+async function dispatchNow(){try{const r=await api('POST','/dispatch-now',{});toast(r.action==='dispatched'?'已派单: '+r.title:'未派单: '+(r.reason||r.action));load();}catch(e){toast('失败: '+e.message);}}
+async function clearDone(){try{const r=await api('POST','/clear-done',{});toast('清理 '+r.removed+' 条');load();}catch(e){toast('失败: '+e.message);}}
+
+if(!KEY())saveKey();
+load();
+setInterval(()=>{if(!document.hidden)load();},5000);
+</script>
+</body>
+</html>
