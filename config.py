@@ -1,7 +1,7 @@
 """zburn-hub 配置：全部走环境变量，默认值对准 zcode-hub 网关的部署布局。
 
   BURNER_SUP_DIR     续派文件协议目录（next-prompt.txt / continue.enabled 所在），
-                     默认指向 zcode-hub 网关的 data/_sup —— 与外部 Stop 钩子共用。
+                     默认指向 zcode-hub 网关的 data/_sup（E:\数据\AI\zcode-hub）——与外部 Stop 钩子共用。
   BURNER_DATA_DIR    本服务自己的数据目录（queue.json / state.json / 日志）。
   BURNER_PORT        HTTP 端口（默认 8791，绑定 127.0.0.1）。
   BURNER_ADMIN_KEY   后台管理密钥（默认随机生成一次并写入 data/admin-key.txt）。
@@ -22,7 +22,7 @@ def _path(env: str, default: str) -> Path:
 
 
 # 续派文件协议目录：默认对准 zcode-hub 网关的 data/_sup（Stop 钩子读的就是它）
-SUP_DIR = _path("BURNER_SUP_DIR", r"E:\数据\AI\zcode2api\data\_sup")
+SUP_DIR = _path("BURNER_SUP_DIR", r"E:\数据\AI\zcode-hub\data\_sup")
 # 本服务数据目录
 DATA_DIR = _path("BURNER_DATA_DIR", str(_HERE / "data"))
 # 服务端口与绑定地址

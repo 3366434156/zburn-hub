@@ -1,0 +1,1 @@
+{"name":"zcode-supervisor-continue","version":"0.2.1","description":"Stop 钩子：白名单项目 + 一次性续派 + 额度闸（本仓含源）","hooks":"./hooks/hooks.json"}
