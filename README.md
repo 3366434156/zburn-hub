@@ -28,7 +28,7 @@ zburn-hub（本服务）                      ZCode 会话
 
 ```bat
 pip install -r requirements.txt
-set BURNER_SUP_DIR=E:\数据\AI\zcode2api\data\_sup
+set BURNER_SUP_DIR=E:\数据\AI\zcode-hub\data\_sup
 python main.py
 ```
 
@@ -44,7 +44,7 @@ Stop 钩子只对 `_sup\continue.projects` 里列出的项目根目录下的会�
 
 | 变量 | 默认 | 说明 |
 |---|---|---|
-| `BURNER_SUP_DIR` | `E:\数据\AI\zcode2api\data\_sup` | 文件协议目录，须与 Stop 钩子读的一致 |
+| `BURNER_SUP_DIR` | `E:\数据\AI\zcode-hub\data\_sup` | 文件协议目录，须与 Stop 钩子读的一致 |
 | `BURNER_DATA_DIR` | `<本仓>/data` | 队列/状态/密钥存放 |
 | `BURNER_PORT` / `BURNER_HOST` | `8791` / `127.0.0.1` | 服务监听 |
 | `BURNER_ADMIN_KEY` | 首次随机生成 | 后台密钥（写入 `data/admin-key.txt`） |
